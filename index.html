@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ROI Calculator - 16 Cycle Investment</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <link rel="stylesheet" media="only screen and (max-width: 480px)" href="mobile.css" />
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            padding: 40px;
+            color: #1f2937;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+
+        .input-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        label {
+            font-weight: 500;
+        }
+
+        input,
+        select {
+            padding: 10px;
+            font-size: 1rem;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1rem;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #2563eb;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+        }
+
+        th,
+        td {
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+
+        .summary,
+        .buttons {
+            margin-top: 20px;
+            font-size: 1.1rem;
+            text-align: right;
+        }
+
+        #chart-container {
+            margin-top: 40px;
+        }
+
+        @media (max-width: 480px) {
+  body {
+    padding: 15px;
+  }
+
+  .container {
+    padding: 20px;
+    border-radius: 10px;
+  }
+
+  h2 {
+    font-size: 1.3rem;
+    margin-bottom: 20px;
+  }
+
+  .input-group {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .input-group > div {
+    width: 100%;
+  }
+
+  input, select, button {
+    font-size: 1rem;
+    width: 100%;
+  }
+
+  button {
+    padding: 12px;
+  }
+
+  table {
+    font-size: 12px;
+    min-width: 600px;
+  }
+
+  .responsive-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .summary {
+    font-size: 0.95rem;
+    text-align: left;
+    margin-top: 20px;
+  }
+
+  canvas {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  #downloadBtn {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 12px; /* THIS ensures vertical spacing between buttons */
+  }
+
+  #downloadBtn button {
+    width: 100%;
+  }
+}
+
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>ROI Calculator - 16 Cycle Investment</h2>
+        <div class="input-group">
+            <div>
+                <label for="principal">Principal Amount ($):</label><br>
+                <input type="number" id="principal" value="100" />
+            </div>
+            <div>
+                <label for="startDate">Date of Investment:</label><br>
+                <input type="date" id="startDate" />
+            </div>
+            <div>
+                <label for="cycleDays">Retopup:</label><br>
+                <select id="cycleDays">
+                    <option value="10">Every 10 Days</option>
+                    <option value="15">Every 15 Days</option>
+                </select>
+            </div>
+            <div>
+                <label>&nbsp;</label><br>
+                <button onclick="generateTable()">Generate</button>
+            </div>
+            <div id="downloadBtn" style="display:none">
+                <label>&nbsp;</label><br>
+                <button onclick="downloadExcel()">Download Excel</button>
+                <button onclick="downloadPDF()">Download PDF</button>
+            </div>
+        </div>
+
+        <div id="result"></div>
+        <div class="summary" id="summary"></div>
+        <div id="chart-container">
+            <canvas id="cumulativeChart" height="100"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let cycleData = [];
+
+        function generateTable() {
+            const principal = parseFloat(document.getElementById('principal').value);
+            const startDate = new Date(document.getElementById('startDate').value);
+            const cycleInterval = parseInt(document.getElementById('cycleDays').value);
+            const tableContainer = document.getElementById('result');
+            const summaryContainer = document.getElementById('summary');
+            const chartContainer = document.getElementById('cumulativeChart');
+
+            if (!principal || isNaN(startDate.getTime())) {
+                alert('Please enter valid inputs.');
+                return;
+            }
+
+            document.getElementById('downloadBtn').style.display = 'block';
+
+            let html = '<table id="roiTable"><tr><th>Cycle</th><th>Investment Date</th><th>Return Date</th><th>Invested Amount</th><th>Profit (15%)</th><th>Returned Amount</th><th>Cumulative Return</th></tr>';
+
+            let totalProfit = 0;
+            let cumulative = 0;
+            const returnDuration = 15;
+            cycleData = [];
+
+            for (let i = 0; i < 16; i++) {
+                const investDate = new Date(startDate);
+                investDate.setDate(investDate.getDate() + i * cycleInterval);
+                const returnDate = new Date(investDate);
+                returnDate.setDate(returnDate.getDate() + returnDuration);
+
+                const profit = (principal * 0.15);
+                const returned = (principal + profit);
+                totalProfit += profit;
+                cumulative += returned;
+
+                cycleData.push({
+                    cycle: i + 1,
+                    investDate: investDate.toISOString().split('T')[0],
+                    returnDate: returnDate.toISOString().split('T')[0],
+                    invested: principal,
+                    profit: profit,
+                    returned: returned,
+                    cumulative: cumulative
+                });
+
+                html += `<tr>
+          <td>${i + 1}</td>
+          <td>${cycleData[i].investDate}</td>
+          <td>${cycleData[i].returnDate}</td>
+          <td>$${principal.toFixed(2)}</td>
+          <td>$${profit.toFixed(2)}</td>
+          <td>$${returned.toFixed(2)}</td>
+          <td>$${cumulative.toFixed(2)}</td>
+        </tr>`;
+            }
+
+            html += '</table>';
+            tableContainer.innerHTML = html;
+
+            const deduction = totalProfit * 0.10;
+            const netTotal = totalProfit - deduction;
+
+            summaryContainer.innerHTML = `
+        <p><strong>Gross Profit:</strong> $${totalProfit.toFixed(2)}</p>
+        <p><strong>Deduction (10%):</strong> $${deduction.toFixed(2)}</p>
+        <p><strong>Total After Deduction:</strong> $${netTotal.toFixed(2)}</p>
+      `;
+
+            drawChart();
+        }
+
+        function drawChart() {
+            const ctx = document.getElementById('cumulativeChart').getContext('2d');
+            const labels = cycleData.map(c => `Cycle ${c.cycle}`);
+            const data = cycleData.map(c => c.cumulative);
+
+            if (window.cumulativeChartInstance) {
+                window.cumulativeChartInstance.destroy();
+            }
+
+            window.cumulativeChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Cumulative Return ($)',
+                        data: data,
+                        fill: false,
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: true
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function downloadExcel() {
+            const wb = XLSX.utils.book_new();
+            const ws_data = [
+                ["Cycle", "Investment Date", "Return Date", "Invested Amount", "Profit (15%)", "Returned Amount", "Cumulative Return"]
+            ];
+            cycleData.forEach(row => {
+                ws_data.push([
+                    row.cycle,
+                    row.investDate,
+                    row.returnDate,
+                    row.invested,
+                    row.profit.toFixed(2),
+                    row.returned.toFixed(2),
+                    row.cumulative.toFixed(2)
+                ]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(ws_data);
+            XLSX.utils.book_append_sheet(wb, ws, "ROI Report");
+            XLSX.writeFile(wb, "ROI Calculator.xlsx");
+        }
+
+        function downloadPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+
+            const headers = [["Cycle", "Investment Date", "Return Date", "Invested Amount", "Profit (15%)", "Returned Amount", "Cumulative Return"]];
+            const rows = cycleData.map(row => [
+                row.cycle,
+                row.investDate,
+                row.returnDate,
+                `$${row.invested.toFixed(2)}`,
+                `$${row.profit.toFixed(2)}`,
+                `$${row.returned.toFixed(2)}`,
+                `$${row.cumulative.toFixed(2)}`
+            ]);
+
+            doc.autoTable({
+                head: headers,
+                body: rows,
+                startY: 20,
+                styles: { fontSize: 10 },
+                headStyles: { fillColor: [59, 130, 246] },
+                margin: { top: 20 },
+                didDrawPage: function (data) {
+                    doc.setFontSize(14);
+                    doc.text("ROI Calculator", doc.internal.pageSize.getWidth() / 2, 12, { align: "center" });
+                }
+            });
+
+            doc.save("ROI Calculator.pdf");
+        }
+
+    </script>
+</body>
+
+</html>
